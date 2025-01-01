@@ -1,101 +1,81 @@
-import Image from "next/image";
+export const runtime = 'edge';
+import { NextResponse } from "next/server";
 
-export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+// Load and parse the CSV file
+async function loadBins() {
+  try {
+    // Fetch the CSV file from the public folder
+    const res = await fetch('https://bin-api.pages.dev/bins.csv');
+    if (!res.ok) throw new Error("Failed to load bins.csv");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+    const text = await res.text(); // Get CSV data as text
+    const bins = {};
+
+    // Parse CSV file line by line
+    text.split("\n").forEach((line) => {
+      const arr = line
+        .trim()
+        .split(",")
+        .map((x) => decodeURIComponent(x.trim()));
+
+      const bin = {
+        bin: arr[0],
+        card_brand: arr[1],
+        card_type: arr[2],
+        card_level: arr[3],
+        bank_name: arr[4],
+        bank_website: arr[5],
+        bank_phone: arr[6],
+        country_name: arr[7],
+        country_code: arr[8],
+        country_iso3: arr[9],
+        currency: arr[10],
+      };
+      bins[bin.bin] = bin;
+    });
+
+    return bins;
+  } catch (error) {
+    console.error("Error loading bins:", error);
+    throw error;
+  }
+}
+
+// API handler function
+export async function GET(req) {
+  try {
+    // Extract query parameters
+    const { searchParams } = new URL(req.url);
+    const binParam = searchParams.get("bin"); // Get 'bin' parameter
+
+    // Validate the bin parameter
+    if (!binParam || binParam.length < 6) {
+      return NextResponse.json(
+        { success: false, error: "Invalid or missing BIN parameter." },
+        { status: 400 }
+      );
+    }
+
+    // Load BIN data from the CSV
+    const bins = await loadBins();
+
+    // Search for the BIN
+    const binKey = binParam.substring(0, 6);
+    const binData = bins[binKey];
+
+    // Return result
+    if (binData) {
+      return NextResponse.json({ success: true, data: binData });
+    } else {
+      return NextResponse.json(
+        { success: false, error: "BIN not found." },
+        { status: 404 }
+      );
+    }
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
 }
